@@ -38,7 +38,7 @@ def enum_type(enum, feature_set):
     if enum.alias and enum.value is None:
         aliased = feature_set.find_enum(enum.alias)
         if aliased is None:
-            raise ValueError('unable to resolve enum alias {} of enum {}'.format(enum.alias, enum))
+            raise ValueError(f'unable to resolve enum alias {enum.alias} of enum {enum}')
         enum = aliased
 
     # if the value links to another enum, resolve the enum right now
@@ -94,7 +94,7 @@ def enum_value(enum, feature_set):
         pass
     elif referenced.parent_type is not None:
         # global value is a reference to a enum type value
-        return '{}::{} as u32'.format(referenced.parent_type, enum.value)
+        return f'{referenced.parent_type}::{enum.value} as u32'
     else:
         enum = referenced
 
@@ -106,7 +106,7 @@ def enum_value(enum, feature_set):
     if enum.value.startswith('EGL_CAST'):
         # EGL_CAST(type,value) -> value as type
         type_, value = enum.value.split('(', 1)[1].rsplit(')', 1)[0].split(',')
-        return '{} as {}'.format(value, type_)
+        return f'{value} as {type_}'
 
     if enum.type == 'float' and value.endswith('F'):
         value = value[:-1]
@@ -137,7 +137,7 @@ def to_rust_type(type_):
     type_ = _RUST_TYPE_MAPPING.get(parsed_type.type, parsed_type.type)
 
     if parsed_type.is_array > 0:
-        type_ = '[{};{}]'.format(type_, parsed_type.is_array)
+        type_ = f'[{type_};{parsed_type.is_array}]'
 
     return ' '.join(e.strip() for e in (prefix, type_)).strip()
 
@@ -153,13 +153,11 @@ def to_rust_params(command, mode='full'):
             for param in command.params
         )
 
-    raise ValueError('invalid mode: ' + mode)
+    raise ValueError(f'invalid mode: {mode}')
 
 
 def identifier(name):
-    if name in ('type', 'ref', 'box', 'in'):
-        return name + '_'
-    return name
+    return f'{name}_' if name in ('type', 'ref', 'box', 'in') else name
 
 
 class RustConfig(Config):
@@ -186,13 +184,19 @@ class RustGenerator(JinjaGenerator):
         JinjaGenerator.__init__(self, *args, **kwargs)
 
         self.environment.filters.update(
-            feature=lambda x: 'feature = "{}"'.format(x),
-            enum_type=jinja2_contextfilter(lambda ctx, enum: enum_type(enum, ctx['feature_set'])),
-            enum_value=jinja2_contextfilter(lambda ctx, enum: enum_value(enum, ctx['feature_set'])),
+            feature=lambda x: f'feature = "{x}"',
+            enum_type=jinja2_contextfilter(
+                lambda ctx, enum: enum_type(enum, ctx['feature_set'])
+            ),
+            enum_value=jinja2_contextfilter(
+                lambda ctx, enum: enum_value(enum, ctx['feature_set'])
+            ),
             type=to_rust_type,
             params=to_rust_params,
             identifier=identifier,
-            no_prefix=jinja2_contextfilter(lambda ctx, value: strip_specification_prefix(value, ctx['spec']))
+            no_prefix=jinja2_contextfilter(
+                lambda ctx, value: strip_specification_prefix(value, ctx['spec'])
+            ),
         )
 
     @property
@@ -220,9 +224,9 @@ class RustGenerator(JinjaGenerator):
 
     def get_templates(self, spec, feature_set, config):
         return [
-            ('Cargo.toml', 'glad-{}/Cargo.toml'.format(feature_set.name)),
-            ('lib.rs', 'glad-{}/src/lib.rs'.format(feature_set.name)),
-            ('impl.rs', 'glad-{}/src/{}.rs'.format(feature_set.name, spec.name))
+            ('Cargo.toml', f'glad-{feature_set.name}/Cargo.toml'),
+            ('lib.rs', f'glad-{feature_set.name}/src/lib.rs'),
+            ('impl.rs', f'glad-{feature_set.name}/src/{spec.name}.rs'),
         ]
 
     def modify_feature_set(self, spec, feature_set, config):
@@ -236,10 +240,9 @@ class RustGenerator(JinjaGenerator):
         https://github.com/KhronosGroup/Vulkan-Docs/issues/1754
         they need to be removed, we need to also remove any type which is an alias to that empty enum.
         """
-        to_remove = set()
-
-        for typ in (t for t in feature_set.types if isinstance(t, EnumType)):
-            if typ.alias is None and not typ.enums_for(feature_set):
-                to_remove.add(typ.name)
-
+        to_remove = {
+            typ.name
+            for typ in (t for t in feature_set.types if isinstance(t, EnumType))
+            if typ.alias is None and not typ.enums_for(feature_set)
+        }
         feature_set.types = [t for t in feature_set.types if t.name not in to_remove and t.alias not in to_remove]

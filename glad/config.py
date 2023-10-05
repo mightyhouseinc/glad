@@ -61,9 +61,8 @@ class ConfigOption(object):
         self.help = help
 
         try:
-            self.description = '{}. {}'.format(
-                self.description.rstrip('. '),
-                self.converter.__config_doc__
+            self.description = (
+                f"{self.description.rstrip('. ')}. {self.converter.__config_doc__}"
             )
         except AttributeError:
             pass
@@ -81,12 +80,11 @@ class ConfigOption(object):
 
         if self.required:
             args['required'] = True
+        elif self.converter is bool:
+            args['action'] = 'store_false' if self.default else 'store_true'
+            args.pop('type')
         else:
-            if self.converter is bool:
-                args['action'] = 'store_false' if self.default else 'store_true'
-                args.pop('type')
-            else:
-                args['default'] = self.default
+            args['default'] = self.default
 
         return args
 
@@ -122,7 +120,7 @@ class RequirementConstraint(Constraint):
         plural = len(constraint.options) > 1
         options = ', '.join(constraint.options[:-1])
         if options:
-            options = '{} and {}'.format(options, constraint.options[-1])
+            options = f'{options} and {constraint.options[-1]}'
         else:
             options = constraint.options[0]
 
@@ -159,7 +157,7 @@ class UnsupportedConstraint(Constraint):
         plural = len(constraint.given) > 1
         given = ', '.join(constraint.given[:-1])
         if given:
-            given = '{} and {}'.format(given, constraint.given[-1])
+            given = f'{given} and {constraint.given[-1]}'
         else:
             given = constraint.given[-1]
 
@@ -269,7 +267,7 @@ class Config(object):
         """
         for name, option in self._options.items():
             if option.required:
-                if not name in self._values:
+                if name not in self._values:
                     raise OptionRequired(name, option)
 
         constraints = getattr(self, '__constraints__', [])

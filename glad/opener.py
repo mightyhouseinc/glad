@@ -34,12 +34,9 @@ def _urlretrieve_with_opener(opener, url, filename, data=None):
         with open(filename, 'wb') as dest:
             result = filename, headers
             bs = 1024*8
-            size = -1
             read = 0
             blocknum = 0
-            if "content-length" in headers:
-                size = int(headers["Content-Length"])
-
+            size = int(headers["Content-Length"]) if "content-length" in headers else -1
             while True:
                 block = src.read(bs)
                 if not block:
@@ -79,10 +76,7 @@ class URLOpener(object):
         """
         logger.info('opening: \'%s\'', url)
 
-        if data is None:
-            return self.opener.open(url)
-
-        return self.opener.open(url, data)
+        return self.opener.open(url) if data is None else self.opener.open(url, data)
 
     def urlretrieve(self, url, filename, data=None):
         """

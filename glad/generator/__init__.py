@@ -72,9 +72,7 @@ class BaseGenerator(object):
 
 
 def _api_filter(api):
-    if len(api) > 5:
-        return api.capitalize()
-    return api.upper()
+    return api.capitalize() if len(api) > 5 else api.upper()
 
 
 class JinjaGenerator(BaseGenerator):
@@ -294,7 +292,7 @@ class Online(ParameterBuilder):
             return name, 'on' if value else 'off'
 
         if isinstance(value, (list, tuple)):
-            result = list()
+            result = []
             for element in value:
                 if isinstance(element, (list, tuple)) and len(element) == 2:
                     if isinstance(element[1], bool):

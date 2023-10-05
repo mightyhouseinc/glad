@@ -80,7 +80,7 @@ def load_specifications(specification_names, opener, specification_classes=None)
 
     for name in set(specification_names):
         Specification = specification_classes[name]
-        xml_name = name + '.xml'
+        xml_name = f'{name}.xml'
 
         if os.path.isfile(xml_name):
             logger.info('using local specification: %s', xml_name)
@@ -104,7 +104,7 @@ def main(args=None):
     import sys
 
     # Initialize logging as early as possible
-    if not '--quiet' in (args or sys.argv):
+    if '--quiet' not in (args or sys.argv):
         logging.basicConfig(
             format='[%(asctime)s][%(levelname)s\t][%(name)-7s\t]: %(message)s',
             datefmt='%d.%m.%Y %H:%M:%S', level=logging.DEBUG
@@ -163,7 +163,7 @@ def main(args=None):
         for api in apis:
             invalid_extensions = invalid_extensions.difference(specification.extensions[api[0]])
 
-    if not len(invalid_extensions) == 0:
+    if len(invalid_extensions) != 0:
         message = 'invalid extensions or extensions not present in one of the selected APIs: {}\n' \
             .format(', '.join(invalid_extensions))
         parser.exit(11, message)
@@ -178,7 +178,7 @@ def main(args=None):
         return generator.select(specification, api, info.version, info.profile, extensions, config, sink=logging_sink)
 
     for specification, apis in apis_by_specification(global_config['API'], specifications):
-        feature_sets = list(select(specification, api, info) for api, info in apis)
+        feature_sets = [select(specification, api, info) for api, info in apis]
 
         if global_config['MERGE']:
             logging_sink.info('merging {}'.format(feature_sets))

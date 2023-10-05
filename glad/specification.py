@@ -8,7 +8,7 @@ class EGL(Specification):
     NAME = 'egl'
 
     def protections(self, symbol, api=None, profile=None, feature_set=None):
-        return list()
+        return []
 
 
 class GL(Specification):
@@ -27,7 +27,7 @@ class GL(Specification):
         return Require(api, profile, requirements)
 
     def protections(self, symbol, api=None, profile=None, feature_set=None):
-        return list()
+        return []
 
 
 class GLX(Specification):
@@ -37,7 +37,7 @@ class GLX(Specification):
     NAME = 'glx'
 
     def protections(self, symbol, api=None, profile=None, feature_set=None):
-        return list()
+        return []
 
 
 class WGL(Specification):
@@ -47,7 +47,7 @@ class WGL(Specification):
     NAME = 'wgl'
 
     def protections(self, symbol, api=None, profile=None, feature_set=None):
-        return list()
+        return []
 
 
 class VK(Specification):

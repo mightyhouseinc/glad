@@ -31,22 +31,19 @@ Header = namedtuple('_Header', ['name', 'include', 'url'])
 
 
 def type_to_c(parsed_type):
-    result = ''
-
-    for text in glad.util.itertext(parsed_type._element, ignore=('comment',)):
-        if text == parsed_type.name:
-            # yup * is sometimes part of the name
-            result += '*' * text.count('*')
-        else:
-            result += text
+    result = ''.join(
+        '*' * text.count('*') if text == parsed_type.name else text
+        for text in glad.util.itertext(
+            parsed_type._element, ignore=('comment',)
+        )
+    )
     result = _ARRAY_RE.sub('*', result)
     return result.strip()
 
 
 def params_to_c(params):
     result = ', '.join(param.type._raw for param in params) if params else 'void'
-    result = ' '.join(result.split())
-    return result
+    return ' '.join(result.split())
 
 
 def param_names(params):
@@ -69,8 +66,9 @@ def loadable(context, extensions=None, api=None):
 
     for extension in itertools.chain.from_iterable(extensions):
         if api is None or extension.supports(api):
-            commands = extension.get_requirements(spec, feature_set=feature_set).commands
-            if commands:
+            if commands := extension.get_requirements(
+                spec, feature_set=feature_set
+            ).commands:
                 yield extension, commands
 
 
@@ -85,12 +83,17 @@ def get_debug_impl(command, command_code_name=None):
     impl = params_to_c(command.params)
     func = param_names(command.params)
 
-    pre_callback = ', '.join(filter(None, [
-        '"{}"'.format(command.name),
-        '(GLADapiproc) {}'.format(command_code_name),
-        str(len(command.params)),
-        func
-    ]))
+    pre_callback = ', '.join(
+        filter(
+            None,
+            [
+                f'"{command.name}"',
+                f'(GLADapiproc) {command_code_name}',
+                str(len(command.params)),
+                func,
+            ],
+        )
+    )
 
     is_void_ret = is_void(command.proto.ret)
 
@@ -99,9 +102,9 @@ def get_debug_impl(command, command_code_name=None):
     ret = DebugReturn('', '', '')
     if not is_void_ret:
         ret = DebugReturn(
-            '{} ret;\n    '.format(type_to_c(command.proto.ret)),
+            f'{type_to_c(command.proto.ret)} ret;\n    ',
             'ret = ',
-            'return ret;'
+            'return ret;',
         )
 
     return DebugArguments(impl, func, pre_callback, post_callback, ret)
@@ -113,7 +116,7 @@ def ctx(jinja_context, name, context='context', raw=False, name_only=False, memb
 
     prefix = 'glad_'
     if options['mx']:
-        prefix = context + '->'
+        prefix = f'{context}->'
         if name.startswith('GLAD_'):
             name = name[5:]
 
@@ -125,18 +128,15 @@ def ctx(jinja_context, name, context='context', raw=False, name_only=False, memb
         return name
 
     # you won't the name, only when we're not mx
-    if name_only and not options['mx']:
-        return name
-
-    return prefix + name
+    return name if name_only and not options['mx'] else prefix + name
 
 
 @jinja2_contextfilter
 def pfn(context, value):
     spec = context['spec']
     if spec.name in (VK.NAME,):
-        return 'PFN_' + value
-    return 'PFN' + value.upper() + 'PROC'
+        return f'PFN_{value}'
+    return f'PFN{value.upper()}PROC'
 
 
 @jinja2_contextfilter
@@ -153,13 +153,13 @@ def c_commands(context, commands):
     :return: commands filtered
     """
     spec = context['spec']
-    if not spec.name == WGL.NAME:
+    if spec.name != WGL.NAME:
         return commands
 
     feature_set = context['feature_set']
     core = feature_set.features[0].get_requirements(spec, feature_set=feature_set)
 
-    return [command for command in commands if not command in core]
+    return [command for command in commands if command not in core]
 
 
 @jinja2_contextfunction
@@ -189,9 +189,7 @@ def enum_member(context, type_, member, require_value=False):
     # Just have to get the actual value now
     def resolve(target):
         target = feature_set.find_enum(target)
-        if target.alias is None:
-            return target.value
-        return resolve(target.alias)
+        return target.value if target.alias is None else resolve(target.alias)
 
     return resolve(member.alias)
 
@@ -315,14 +313,16 @@ class CGenerator(JinjaGenerator):
         )
 
         self.environment.filters.update(
-            defined=lambda x: 'defined({})'.format(x),
+            defined=lambda x: f'defined({x})',
             type_to_c=type_to_c,
             params_to_c=params_to_c,
             param_names=param_names,
             pfn=pfn,
             ctx=ctx,
-            no_prefix=jinja2_contextfilter(lambda ctx, value: strip_specification_prefix(value, ctx['spec'])),
-            c_commands=c_commands
+            no_prefix=jinja2_contextfilter(
+                lambda ctx, value: strip_specification_prefix(value, ctx['spec'])
+            ),
+            c_commands=c_commands,
         )
 
         self.environment.tests.update(
@@ -367,20 +367,17 @@ class CGenerator(JinjaGenerator):
         return args
 
     def get_templates(self, spec, feature_set, config):
-        header = 'include/glad/{}.h'.format(feature_set.name)
-        source = 'src/{}.c'.format(feature_set.name)
+        header = f'include/glad/{feature_set.name}.h'
+        source = f'src/{feature_set.name}.c'
 
-        templates = list()
+        templates = []
 
         if config['HEADER_ONLY']:
             templates.extend([
                 ('header_only.h', header)
             ])
         else:
-            templates.extend([
-                ('{}.h'.format(spec.name), header),
-                ('{}.c'.format(spec.name), source)
-            ])
+            templates.extend([(f'{spec.name}.h', header), (f'{spec.name}.c', source)])
 
         return templates
 
@@ -483,7 +480,7 @@ class CGenerator(JinjaGenerator):
             if header.name not in feature_set.types:
                 continue
 
-            path = os.path.join(self.path, 'include/{}'.format(header.include))
+            path = os.path.join(self.path, f'include/{header.include}')
 
             directory_path = os.path.split(path)[0]
             if not os.path.exists(directory_path):

@@ -45,7 +45,7 @@ class FeatureSetInfo(object):
         def __str__(self):
             result = self.api
             if self.profile:
-                result += ':{}'.format(self.profile)
+                result += f':{self.profile}'
             result += '={version.major}.{version.minor}'.format(version=self.version)
             if self.identifier:
                 result += '-{!r}'.format(self.identifier)
@@ -135,7 +135,7 @@ class FeatureSet(object):
                     # APIs, but the merging code already makes sure it selects
                     # one of the candidates and not both
                     if enum.name in result:
-                        raise ValueError('duplicate enum {} in feature set'.format(enum.name))
+                        raise ValueError(f'duplicate enum {enum.name} in feature set')
                     result[enum.name] = enum
 
         return result
@@ -149,9 +149,7 @@ class FeatureSet(object):
         :param default: default value to return if not found
         :return: the enum if found or else the default
         """
-        if name is None:
-            return default
-        return self._all_enums.get(name, default)
+        return default if name is None else self._all_enums.get(name, default)
 
     @classmethod
     def merge(cls, feature_sets, sink=LoggingSink()):
@@ -162,7 +160,7 @@ class FeatureSet(object):
             for new_item in new_items:
                 # TODO merge strategy, prefer khronos types
                 in_dict = items.setdefault(new_item.name, new_item)
-                if not in_dict is new_item:
+                if in_dict is not new_item:
                     if not in_dict.is_equivalent(new_item):
                         sink.warning('potential incompatibility: {!r} <-> {!r}'.format(new_item, in_dict))
 
@@ -277,7 +275,7 @@ class Specification(object):
     @classmethod
     def from_file(cls, path_or_file_like, opener=None):
         try:
-            return cls.from_url('file:' + path_or_file_like, opener=opener)
+            return cls.from_url(f'file:{path_or_file_like}', opener=opener)
         except TypeError:
             return cls(xml_parse(path_or_file_like))
 
@@ -289,8 +287,10 @@ class Specification(object):
     def groups(self):
         warnings.warn('the groups have been deprecated in the spec', DeprecationWarning)
         if self._groups is None:
-            self._groups = dict((element.attrib['name'], Group(element))
-                                for element in self.root.find('groups'))
+            self._groups = {
+                element.attrib['name']: Group(element)
+                for element in self.root.find('groups')
+            }
         return self._groups
 
     @property
@@ -316,7 +316,7 @@ class Specification(object):
             name = element.get('name') or element.find('name').text
 
             if element.get('category') != 'enum':
-                types.setdefault(name, list()).extend(Type.from_element(element))
+                types.setdefault(name, []).extend(Type.from_element(element))
                 continue
 
             # Enum special handling
@@ -327,7 +327,7 @@ class Specification(object):
                     logger.debug('type {} with category enum but without <enums>'.format(name))
                     continue
                 # It's just a simple alias, add it
-                types.setdefault(name, list()).extend(Type.from_element(element))
+                types.setdefault(name, []).extend(Type.from_element(element))
                 continue
             elif len(enums_element) > 1:
                 # this should never happen, if it does ... well shit
@@ -335,7 +335,12 @@ class Specification(object):
             enums_element = enums_element[0]
 
             # Copy the type for each API it is used in
-            apis = set(e.get('api') for e in self.root.findall('.//require/enum[@extends="{}"]'.format(name)))
+            apis = {
+                e.get('api')
+                for e in self.root.findall(
+                    './/require/enum[@extends="{}"]'.format(name)
+                )
+            }
             for api in apis or [None]:
                 # Hack: Enum Type always returns only one element,
                 # because we do the special handling here
@@ -367,7 +372,7 @@ class Specification(object):
                     for extending_enum in extension.findall('.//require/enum[@extends="{}"]'.format(t.name)):
                         enum = Enum.from_element(extending_enum, extnumber=extnumber, parent_type=t.name)
                         # Make sure this enum is relevant for the current API
-                        if not enum.api == api and enum.api is not None:
+                        if enum.api != api and enum.api is not None:
                             continue
 
                         if enum.name not in enums:
@@ -375,7 +380,7 @@ class Specification(object):
                         else:
                             # technically not required, but better throw more
                             # than generate broken code because of a broken specification
-                            if not enum.value == enums[enum.name].value:
+                            if enum.value != enums[enum.name].value:
                                 raise ValueError('extension enum {} required multiple times '
                                                  'with different values'.format(e.name))
 
@@ -383,14 +388,18 @@ class Specification(object):
 
                 t.enums = list(enums.values())
 
-                types.setdefault(t.name, list()).append(t)
+                types.setdefault(t.name, []).append(t)
 
         def _type_dependencies(item):
             # all requirements of all types (types can exist more than once, e.g. specialized for an API)
             # but only requirements that are types as well
-            requirements = set(r for r in chain.from_iterable(t.requires for t in item[1]) if r in types)
+            requirements = {
+                r
+                for r in chain.from_iterable(t.requires for t in item[1])
+                if r in types
+            }
             # requirements.add(r.parent_type)
-            aliases = set(t.alias for t in item[1] if t.alias and t.alias in types)
+            aliases = {t.alias for t in item[1] if t.alias and t.alias in types}
             dependencies = requirements.union(aliases)
             dependencies.discard(item[0])
             return dependencies
@@ -518,7 +527,7 @@ class Specification(object):
         else:
             extensions = chain(self.features, self.extensions)
 
-        protections = list()
+        protections = []
         for ext in extensions:
             requirements = ext.get_requirements(self, api=api, profile=profile, feature_set=feature_set)
 
@@ -529,7 +538,7 @@ class Specification(object):
                     protections.append(self.platforms[ext.platform].protect)
                 else:
                     # symbol found in at least one unprotected extension
-                    return list()
+                    return []
 
         return protections
 
@@ -543,8 +552,12 @@ class Specification(object):
         :param recursive: recursively resolve requirements
         :return: iterator with all results
         """
-        if not ((require.profile is None or require.profile == profile) and
-                (require.api is None or require.api == api)):
+        if (
+            require.profile is not None
+            and require.profile != profile
+            or require.api is not None
+            and require.api != api
+        ):
             return
 
         if self._combined is None:
@@ -587,9 +600,7 @@ class Specification(object):
                 # TODO auto-require types from commands etc.
                 requires = getattr(best_match, 'requires', None)
                 if recursive and requires is not None:
-                    # just add new requirements
-                    new_requirements = set(requires).difference(requirements)
-                    if new_requirements:
+                    if new_requirements := set(requires).difference(requirements):
                         requirements.update(new_requirements)
                         open_requirements.extend(new_requirements)
 
@@ -641,9 +652,7 @@ class Specification(object):
         :param default: default value to return if not found
         :return: the enum if found or else the default
         """
-        if name is None:
-            return default
-        return self._all_enums.get(name, default)
+        return default if name is None else self._all_enums.get(name, default)
 
     @staticmethod
     def split_types(iterable, types):
@@ -689,18 +698,17 @@ class Specification(object):
         # None means latest version, update the dictionary with the latest version
         if version is None:
             version = self.highest_version(api)
-            sink.info('no explicit version given for api {}, using {}'.format(api, version))
+            sink.info(f'no explicit version given for api {api}, using {version}')
 
         # make sure the version is valid
         if version not in self.features[api]:
             raise ValueError(
-                'Unknown version {}.{} for API {} (specification: {})'
-                .format(version[0], version[1], api, self.name)
+                f'Unknown version {version[0]}.{version[1]} for API {api} (specification: {self.name})'
             )
 
         all_extensions = list(self.extensions[api].keys())
         if extension_names is None:
-            sink.info('adding all extensions for api {} to result'.format(api))
+            sink.info(f'adding all extensions for api {api} to result')
             # None means all extensions
             extension_names = all_extensions
         else:
@@ -723,7 +731,7 @@ class Specification(object):
             except KeyError:
                 pass
             else:
-                sink.warning('removed extension {}, it uses unsupported types'.format(extension))
+                sink.warning(f'removed extension {extension}, it uses unsupported types')
 
         # OpenGL version 3.3 includes all versions up to 3.3
         # Collect a list of all required features grouped by API
@@ -853,7 +861,7 @@ class Type(IdentifiedByName):
         parent = element.get('parent')
 
         # a type referenced by a struct/funcptr is required by this type
-        requires = set(t.text for t in element.iter('type') if t is not element)
+        requires = {t.text for t in element.iter('type') if t is not element}
         requires.update(e.text for e in element.iter('enum'))
         if element.get('requires'):
             requires.add(element.get('requires'))
@@ -938,11 +946,11 @@ class MemberType(Type):
         members = [Member.from_element(e) for e in element.findall('member')]
 
         # May not have members at all (struct with only an alias)
-        if len(members) == 0:
+        if not members:
             return [cls(name, **data)]
 
-        result = list()
-        for api in set(member.api for member in members):
+        result = []
+        for api in {member.api for member in members}:
             api_members = [member for member in members if member.api is None or member.api == api]
             t = cls(name, members=api_members, **data)
             t.api = api
@@ -974,7 +982,7 @@ class EnumType(Type):
         relevant = set(feature_set.features) | set(feature_set.extensions)
 
         required_names = set()
-        result = list()
+        result = []
         # assume order, an alias must be after the enum it is aliased to
         # reverse here so we add the alias first then we can check if the
         # value that is referenced needs to be added as well
@@ -1176,8 +1184,8 @@ class Command(IdentifiedByName):
         if params is None or len(params) == 0:
             return [cls(name, api=api, proto=proto, params=params, alias=alias)]
 
-        result = list()
-        apis = set(param.api for param in params)
+        result = []
+        apis = {param.api for param in params}
         for api in apis:
             api_params = [param for param in params if param.api is None or param.api == api]
             result.append(cls(name, api=api, proto=proto, params=api_params, alias=alias))
@@ -1187,7 +1195,7 @@ class Command(IdentifiedByName):
     @property
     def requires(self):
         if self.params is None:
-            return list()
+            return []
 
         requires = [param.type.original_type for param in self.params if param.type.original_type]
         if self.proto.ret.original_type:

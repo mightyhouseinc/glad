@@ -49,7 +49,7 @@ Message = collections.namedtuple('Message', ['type', 'content', 'exc'])
 
 class CollectingSink(Sink):
     def __init__(self):
-        self.messages = list()
+        self.messages = []
 
     def info(self, message, exc=None):
         self.messages.append(Message('info', message, exc))

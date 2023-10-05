@@ -56,7 +56,7 @@ def parse_version(value):
     if not value:
         return None
 
-    major, minor = (value + '.0').split('.')[:2]
+    major, minor = f'{value}.0'.split('.')[:2]
     return Version(int(major), int(minor))
 
 
@@ -72,14 +72,14 @@ def parse_apis(value, api_spec_mapping=_API_SPEC_MAPPING):
         )
 
         if m is None:
-            raise ValueError('Invalid API {}'.format(api))
+            raise ValueError(f'Invalid API {api}')
 
         spec = m.group('spec')
         if spec is None:
             try:
                 spec = api_spec_mapping[m.group('api')]
             except KeyError:
-                raise ValueError('Can not resolve specification for API {}'.format(m.group('api')))
+                raise ValueError(f"Can not resolve specification for API {m.group('api')}")
 
         version = parse_version(m.group('version'))
 
@@ -177,9 +177,8 @@ def itertext(element, ignore=()):
     if element.text:
         yield element.text
     for e in element:
-        if not e.tag in ignore:
-            for s in itertext(e, ignore=ignore):
-                yield s
+        if e.tag not in ignore:
+            yield from itertext(e, ignore=ignore)
             if e.tail:
                 yield e.tail
 
@@ -194,9 +193,8 @@ def expand_type_name(name):
     upper_name = re.sub(r'([0-9]+|[a-z_])([A-Z0-9])', r'\1_\2', name).upper()
     (prefix, suffix) = (upper_name, '')
 
-    suffix_match = re.search(r'[A-Z][A-Z]+$', name)
-    if suffix_match:
-        suffix = '_' + suffix_match.group()
+    if suffix_match := re.search(r'[A-Z][A-Z]+$', name):
+        suffix = f'_{suffix_match.group()}'
         # Strip off the suffix from the prefix
         prefix = upper_name.rsplit(suffix, 1)[0]
 

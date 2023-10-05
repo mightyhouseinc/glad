@@ -45,7 +45,7 @@ def strip_specification_prefix(name, spec_name=None):
 
     # 3DFX_tbuffer -> _3DFX_tbuffer
     if not name[0].isalpha():
-        name = '_' + name
+        name = f'_{name}'
 
     return name
 
@@ -56,7 +56,7 @@ def collect_alias_information(commands):
 
     # keep a dictionary, store the set of aliases known for each function
     # initialize it to identity, each function aliases itself
-    alias = dict((command.name, set([command.name])) for command in commands)
+    alias = {command.name: {command.name} for command in commands}
     # now, add all further aliases
     for command in commands:
         if command.alias is not None:
@@ -105,7 +105,7 @@ def find_extensions_with_aliases(spec, api, version, profile, extensions):
     """
     feature_set = spec.select(api, version, profile, extensions)
 
-    command_names = set(command.name for command in feature_set.commands)
+    command_names = {command.name for command in feature_set.commands}
 
     new_extensions = set()
     for extension in spec.extensions[api].values():
